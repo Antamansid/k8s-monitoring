@@ -1653,30 +1653,20 @@ cat > monitoring/grafana/hackathon-dashboard.json << EOF
 EOF
 ```
 
-#### Шаг 5.8.3: Создаём ConfigMap для автоматической загрузки в Grafana
+#### Шаг 5.8.3: Создаём и применяем ConfigMap
 
 ```bash
-cat > monitoring/grafana/dashboard-configmap.yaml << EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: hackathon-dashboard
-  namespace: monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  hackathon-dashboard.json: |
-\$(cat monitoring/grafana/hackathon-dashboard.json | sed 's/^/    /')
-EOF
+# Создаём ConfigMap из JSON файла
+kubectl create configmap hackathon-dashboard \
+  --from-file=hackathon-dashboard.json=monitoring/grafana/hackathon-dashboard.json \
+  --namespace monitoring \
+  --dry-run=client -o yaml | \
+  kubectl label --local -f - grafana_dashboard=1 --dry-run=client -o yaml | \
+  kubectl apply -f -
+
 ```
 
-#### Шаг 5.8.4: Применяем ConfigMap
-
-```bash
-kubectl apply -f monitoring/grafana/dashboard-configmap.yaml
-```
-
-#### Шаг 5.8.5: Проверяем
+#### Шаг 5.8.4: Проверяем
 
 ```bash
 # Проверяем что ConfigMap создан
