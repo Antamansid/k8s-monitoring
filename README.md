@@ -1064,6 +1064,645 @@ kubectl get secret -n monitoring prometheus-grafana \
 - Username: `admin`
 - Password: (из команды выше)
 
+### Шаг 5.8: Автоматическое создание Dashboard в Grafana
+
+#### Шаг 5.8.1: Получаем UID Prometheus datasource
+
+```bash
+# Получаем пароль Grafana
+GRAFANA_PASS=$(kubectl get secret -n monitoring prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 -d)
+
+# Получаем UID Prometheus datasource
+PROMETHEUS_UID=$(curl -s -u "admin:$GRAFANA_PASS" "http://$INGRESS_IP/grafana/api/datasources" | jq -r '.[] | select(.type=="prometheus") | .uid')
+
+# Проверяем
+echo "Prometheus UID: $PROMETHEUS_UID"
+
+# Сохраняем в .bashrc
+echo "export PROMETHEUS_UID=$PROMETHEUS_UID" >> ~/.bashrc
+```
+
+#### Шаг 5.8.2: Создаём JSON файл Dashboard
+
+```bash
+mkdir -p monitoring/grafana
+
+cat > monitoring/grafana/hackathon-dashboard.json << EOF
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
+            "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 50},
+              {"color": "red", "value": 200}
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum(rate(hackathon_http_requests_total[1m]))",
+          "legendFormat": "Total RPS",
+          "range": true, "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum by (path) (rate(hackathon_http_requests_total[1m]))",
+          "legendFormat": "{{path}}",
+          "range": true, "refId": "B"
+        }
+      ],
+      "title": "📈 Request Rate (RPS)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
+            "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "mappings": [],
+          "max": 100, "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 10}
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum(rate(hackathon_http_requests_total{status_code=~\"5..\"}[1m])) / sum(rate(hackathon_http_requests_total[1m])) * 100",
+          "legendFormat": "Error Rate %",
+          "range": true, "refId": "A"
+        }
+      ],
+      "title": "🚨 Error Rate (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
+            "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "red", "value": 1}
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(hackathon_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50", "range": true, "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(hackathon_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95", "range": true, "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum(rate(hackathon_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99", "range": true, "refId": "C"
+        }
+      ],
+      "title": "⏱️ Response Time (Latency)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
+            "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 400},
+              {"color": "red", "value": 480}
+            ]
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 4,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum by (pod) (container_memory_working_set_bytes{container=\"app\"}) / 1024 / 1024",
+          "legendFormat": "{{pod}}", "range": true, "refId": "A"
+        }
+      ],
+      "title": "🧠 Memory Usage (MB)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 2},
+              {"color": "green", "value": 3}
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 16},
+      "id": 5,
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "count(kube_pod_status_ready{condition=\"true\", pod=~\"hackathon-app.*\"})",
+          "legendFormat": "__auto", "range": true, "refId": "A"
+        }
+      ],
+      "title": "🟢 Ready Pods",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 3}
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 16},
+      "id": 6,
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{container=\"app\"}[1h]))",
+          "legendFormat": "__auto", "range": true, "refId": "A"
+        }
+      ],
+      "title": "🔄 Restarts (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 50},
+              {"color": "red", "value": 200}
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 16},
+      "id": 7,
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum(rate(hackathon_http_requests_total[1m]))",
+          "legendFormat": "__auto", "range": true, "refId": "A"
+        }
+      ],
+      "title": "📊 Current RPS",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 10}
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 16},
+      "id": 8,
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum(rate(hackathon_http_requests_total{status_code=~\"5..\"}[1m])) / sum(rate(hackathon_http_requests_total[1m])) * 100",
+          "legendFormat": "__auto", "range": true, "refId": "A"
+        }
+      ],
+      "title": "❌ Error Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.5},
+              {"color": "red", "value": 1}
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 16},
+      "id": 9,
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(hackathon_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "__auto", "range": true, "refId": "A"
+        }
+      ],
+      "title": "⏱️ Latency p95",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 16},
+      "id": 10,
+      "options": {
+        "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum(hackathon_http_requests_in_flight)",
+          "legendFormat": "__auto", "range": true, "refId": "A"
+        }
+      ],
+      "title": "🔄 In-Flight",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
+            "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "id": 11,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{container=\"app\"}[1m])) * 100",
+          "legendFormat": "{{pod}}", "range": true, "refId": "A"
+        }
+      ],
+      "title": "💻 CPU Usage (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
+            "barAlignment": 0, "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 2, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false,
+            "stacking": {"group": "A", "mode": "none"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20},
+      "id": 12,
+      "options": {
+        "legend": {"calcs": ["last", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "kube_horizontalpodautoscaler_status_desired_replicas{horizontalpodautoscaler=\"hackathon-app-hpa\"}",
+          "legendFormat": "Desired", "range": true, "refId": "A"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler=\"hackathon-app-hpa\"}",
+          "legendFormat": "Current", "range": true, "refId": "B"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "kube_horizontalpodautoscaler_spec_min_replicas{horizontalpodautoscaler=\"hackathon-app-hpa\"}",
+          "legendFormat": "Min", "range": true, "refId": "C"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "kube_horizontalpodautoscaler_spec_max_replicas{horizontalpodautoscaler=\"hackathon-app-hpa\"}",
+          "legendFormat": "Max", "range": true, "refId": "D"
+        }
+      ],
+      "title": "📈 HPA Scaling",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto",
+            "barAlignment": 0, "drawStyle": "bars", "fillOpacity": 100, "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5,
+            "scaleDistribution": {"type": "linear"}, "showPoints": "never", "spanNulls": false,
+            "stacking": {"group": "A", "mode": "normal"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": [
+          {"matcher": {"id": "byRegexp", "options": ".*5.."}, "properties": [{"id": "color", "value": {"fixedColor": "red", "mode": "fixed"}}]},
+          {"matcher": {"id": "byRegexp", "options": ".*4.."}, "properties": [{"id": "color", "value": {"fixedColor": "yellow", "mode": "fixed"}}]},
+          {"matcher": {"id": "byRegexp", "options": ".*2.."}, "properties": [{"id": "color", "value": {"fixedColor": "green", "mode": "fixed"}}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 28},
+      "id": 13,
+      "options": {
+        "legend": {"calcs": ["sum"], "displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "$PROMETHEUS_UID"},
+          "editorMode": "code",
+          "expr": "sum by (status_code) (increase(hackathon_http_requests_total[1m]))",
+          "legendFormat": "{{status_code}}", "range": true, "refId": "A"
+        }
+      ],
+      "title": "📊 Requests by Status Code",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["hackathon", "nodejs", "kubernetes"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "Hackathon App Dashboard",
+  "uid": "hackathon-dashboard",
+  "version": 1,
+  "weekStart": ""
+}
+EOF
+```
+
+#### Шаг 5.8.3: Создаём ConfigMap для автоматической загрузки в Grafana
+
+```bash
+cat > monitoring/grafana/dashboard-configmap.yaml << EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hackathon-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  hackathon-dashboard.json: |
+\$(cat monitoring/grafana/hackathon-dashboard.json | sed 's/^/    /')
+EOF
+```
+
+#### Шаг 5.8.4: Применяем ConfigMap
+
+```bash
+kubectl apply -f monitoring/grafana/dashboard-configmap.yaml
+```
+
+#### Шаг 5.8.5: Проверяем
+
+```bash
+# Проверяем что ConfigMap создан
+kubectl get configmap -n monitoring hackathon-dashboard
+
+# Ждём 30 секунд (Grafana sidecar подхватывает новые dashboards)
+sleep 30
+
+echo ""
+echo "=========================================="
+echo "Dashboard доступен:"
+echo "http://$INGRESS_IP/grafana/d/hackathon-dashboard"
+echo "=========================================="
+```
+
+**Что содержит Dashboard:**
+- 📈 Request Rate (RPS) — общий и по endpoint'ам
+- 🚨 Error Rate (%) — процент ошибок
+- ⏱️ Response Time — p50, p95, p99 перцентили
+- 🧠 Memory Usage — потребление памяти по подам
+- 💻 CPU Usage — загрузка CPU по подам
+- 📈 HPA Scaling — состояние автомасштабирования
+- 📊 Current RPS, Error Rate, Latency — текущие значения
+- 🟢 Ready Pods, 🔄 Restarts — здоровье подов
+- 📊 Requests by Status Code — распределение по HTTP кодам
+
 ## Этап 6: Настраиваем алерты в Telegram
 
 ### Шаг 6.1: Создаём Telegram бота
