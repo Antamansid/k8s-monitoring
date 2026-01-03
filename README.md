@@ -1071,6 +1071,7 @@ kubectl get secret -n monitoring prometheus-grafana \
 1. Открой @BotFather в Telegram
 2. Отправь `/newbot`
 3. Получи токен
+4. Напиши чего-нибудь боту (ссылка будет в ответе от @BotFather). К примеру `Hello!`.
 
 ### Шаг 6.2: Получаем Chat ID
 
